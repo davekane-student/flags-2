@@ -1,0 +1,65 @@
+---
+title: "Flags of the World"
+format:
+  html:
+    echo: false
+---
+
+```{r}
+#| label: setup
+#| echo: false
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(countrycode)
+
+# Match available flag image filenames to country names
+available_codes <- list.files("data", pattern = "\\.png$") |>
+  tools::file_path_sans_ext()
+
+extra_countries <- tibble(
+  country = c("England", "Northern Ireland", "Scotland", "Wales", "Kosovo"),
+  code = c("gb-eng", "gb-nir", "gb-sct", "gb-wls", "xk")
+)
+
+flags <- codelist |>
+  filter(!is.na(iso2c), tolower(iso2c) %in% available_codes) |>
+  transmute(
+    country = country.name.en,
+    code = tolower(iso2c)
+  ) |>
+  bind_rows(extra_countries) |>
+  arrange(country)
+
+ojs_define(flags_data = flags)
+```
+
+```{ojs}
+//| echo: false
+
+// Convert R data frame columns into an array of objects
+flags = transpose(flags_data)
+
+// Dropdown input to select a country
+viewof selected = Inputs.select(
+  flags,
+  {
+    label: "Select a country:",
+    format: d => d.country,
+    value: flags.find(d => d.country === "United States")
+  }
+)
+
+// Display the selected country's flag
+html`
+  <div style="margin-top: 20px;">
+    <h3>${selected.country}</h3>
+    <img 
+      src="data/${selected.code}.png" 
+      alt="Flag of ${selected.country}" 
+      style="max-width: 450px; width: 100%; border: 1px solid #ddd; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+    />
+  </div>
+`
+```
