@@ -1,0 +1,82 @@
+---
+title: "Flag Viewer"
+format: html
+execute:
+  echo: false
+---
+
+```{r}
+#| cache: true
+files <- list.files("flags", pattern = "\\.png$", full.names = TRUE)
+flag_codes <- sub("\\.png$", "", basename(files))
+
+# Summarize each flag as a 6x9 grid of average RGB colors
+vecs <- parallel::mclapply(files, \(f) {
+  img <- png::readPNG(f)
+  d <- dim(img)
+  if (length(d) == 2) img <- array(img, dim = c(d[1], d[2], 3))
+  r_idx <- round(seq(1, d[1], length.out = 60))
+  c_idx <- round(seq(1, d[2], length.out = 90))
+  sub_img <- img[r_idx, c_idx, 1:3]
+  thumb <- array(0, dim = c(6, 9, 3))
+  for (i in 1:6) {
+    for (j in 1:9) {
+      thumb[i, j, ] <- colMeans(
+        sub_img[(i * 10 - 9):(i * 10), (j * 10 - 9):(j * 10), , drop = FALSE],
+        dims = 2
+      )
+    }
+  }
+  as.numeric(thumb)
+}, mc.cores = parallel::detectCores())
+
+# Compute Euclidean distance between all pairs of flags
+mat <- do.call(rbind, vecs)
+rownames(mat) <- flag_codes
+dmat <- as.matrix(dist(mat))
+
+# Store the 3 closest and 3 farthest matches for each flag
+matches <- setNames(lapply(flag_codes, \(code) {
+  others <- sort(dmat[code, flag_codes != code])
+  list(
+    similar = names(others)[1:3],
+    different = names(rev(others))[1:3]
+  )
+}), flag_codes)
+```
+
+```{r}
+ojs_define(codes = flag_codes, matches = matches)
+```
+
+```{ojs}
+viewof selected = Inputs.select(codes, {
+  label: "Select a flag:",
+  value: "us"
+})
+
+// Helper to render a flag card with its 2-letter code
+renderFlag = (code, width = "180px") => htl.html`
+  <div style="text-align: center;">
+    <img src="flags/${code}.png" style="width: ${width}; border: 1px solid #ccc; display: block;">
+    <div style="margin-top: 0.25rem; font-weight: bold;">${code}</div>
+  </div>
+`
+
+htl.html`
+  <div style="margin-top: 1rem;">
+    <h3>Selected Flag</h3>
+    ${renderFlag(selected, "300px")}
+
+    <h3 style="margin-top: 1.5rem;">3 Most Similar Flags</h3>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      ${matches[selected].similar.map(c => renderFlag(c))}
+    </div>
+
+    <h3 style="margin-top: 1.5rem;">3 Most Different Flags</h3>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      ${matches[selected].different.map(c => renderFlag(c))}
+    </div>
+  </div>
+`
+```
